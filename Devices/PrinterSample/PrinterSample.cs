@@ -22,6 +22,10 @@ using XFS4IoT.Printer;
 using XFS4IoT.Printer.Completions;
 using XFS4IoT.Completions;
 using XFS4IoTServer;
+using System.IO;
+using System.Drawing;
+using System.Drawing.Imaging;
+using Miraway.XFS4IoTSP.Printer.Masung;
 
 namespace KAL.XFS4IoTSP.Printer.Sample
 {
@@ -39,7 +43,7 @@ namespace KAL.XFS4IoTSP.Printer.Sample
             Logger.IsNotNull($"Invalid parameter received in the {nameof(PrinterSample)} constructor. {nameof(Logger)}");
             this.Logger = Logger;
 
-            CommonStatus = new CommonStatusClass(Device: CommonStatusClass.DeviceEnum.Online,
+            CommonStatus = new CommonStatusClass(Device: CommonStatusClass.DeviceEnum.Offline,
                                                  DevicePosition: CommonStatusClass.PositionStatusEnum.InPosition,
                                                  PowerSaveRecoveryTime: 0,
                                                  AntiFraudModule: CommonStatusClass.AntiFraudModuleEnum.NotSupported,
@@ -48,18 +52,36 @@ namespace KAL.XFS4IoTSP.Printer.Sample
 
             PrinterStatus = new PrinterStatusClass(Media: PrinterStatusClass.MediaEnum.NotPresent,
                                                    Paper: new Dictionary<PrinterStatusClass.PaperSourceEnum, PrinterStatusClass.SupplyStatusClass>()
-                                                   { 
-                                                       { PrinterStatusClass.PaperSourceEnum.Upper, PaperSupplyStatus } 
+                                                   {
+                                                       { PrinterStatusClass.PaperSourceEnum.Upper, PaperSupplyStatus }
                                                    },
-                                                   Toner:  PrinterStatusClass.TonerEnum.NotSupported,
-                                                   Ink:  PrinterStatusClass.InkEnum.NotSupported,
-                                                   Lamp:  PrinterStatusClass.LampEnum.NotSupported,
+                                                   Toner: PrinterStatusClass.TonerEnum.NotSupported,
+                                                   Ink: PrinterStatusClass.InkEnum.NotSupported,
+                                                   Lamp: PrinterStatusClass.LampEnum.NotSupported,
                                                    RetractBins: null,
-                                                   MediaOnStacker:  0,
+                                                   MediaOnStacker: 0,
                                                    BlackMarkMode: BlackMarkModeStatus);
+
+            HardwareDevice = new MasungPrinter(this, Logger);
+
         }
 
         #region Printer Interface
+
+        public bool LoadDefinationFromFile(FileInfo fileInfo)
+        {
+            string text = System.IO.File.ReadAllText(fileInfo.FullName);
+            PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
+            if (printerServiceProvider.LoadDefinition(text, true))
+            {
+                Logger.Log("test", $"Load definition successs {fileInfo.FullName}");
+            }
+            else
+            {
+                Logger.Warning("test", $"Load definition error {fileInfo.FullName}");
+            }
+            return true;
+        }
 
         /// <summary>
         /// This method is used to control media.
@@ -85,6 +107,12 @@ namespace KAL.XFS4IoTSP.Printer.Sample
                 await controlMediaEvent.MediaPresentedEvent(new MediaPresentedEvent.PayloadData());
                 new Thread(PaperTakenThread).IsNotNull().Start();
             }
+
+            if (request.Controls.HasFlag(PrinterCapabilitiesClass.ControlEnum.Cut))
+            {
+                HardwareDevice.CutPaper();
+            }
+
 
             return new ControlMediaResult(MessagePayload.CompletionCodeEnum.Success);
         }
@@ -150,7 +178,7 @@ namespace KAL.XFS4IoTSP.Printer.Sample
             await Task.Delay(200, cancellation);
             /* Example of usage for the Bitmap printing for Windows only for now */
             PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
-            int bitCount = 24;
+            int bitCount = 1;
 
             bool success = printerServiceProvider.PrintToBitmap(request.PrintJob, bitCount, true, out ImageInfo imageInfo);
             if (!success)
@@ -184,12 +212,14 @@ namespace KAL.XFS4IoTSP.Printer.Sample
             BitmapData data = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.WriteOnly, pixelFormat);
 
             byte[] formImage = imageInfo.Data.Data.ToArray();
-            Marshal.Copy(formImage, 0, data.Scan0, formImage.Length);
+            System.Runtime.InteropServices.Marshal.Copy(formImage, 0, data.Scan0, formImage.Length);
 
             image.UnlockBits(data);
 
             image.Save("C:\\temp\\test.bmp", ImageFormat.Bmp);
-            */
+
+            HardwareDevice.printBimap("C:\\temp\\test.bmp");
+            /**/
 
             return new PrintTaskResult(MessagePayload.CompletionCodeEnum.Success);
         }
@@ -279,10 +309,14 @@ namespace KAL.XFS4IoTSP.Printer.Sample
         public async Task RunAsync(CancellationToken cancel)
         {
             PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
+            _ = HardwareDevice.IdleProcessAsync(cancel);
 
-            for (;;)
+            for (; ; )
             {
-                await paperTakenSignal?.WaitAsync();
+
+                await paperTakenSignal?.WaitAsync(3000);
+                
+             
                 if (PrinterStatus.Media != PrinterStatusClass.MediaEnum.NotPresent)
                 {
                     PrinterStatus.Media = PrinterStatusClass.MediaEnum.NotPresent;
@@ -294,7 +328,38 @@ namespace KAL.XFS4IoTSP.Printer.Sample
         /// <summary>
         /// This method is to print a loaded form and media in the firmware where all fields prefixed positions are recognized.
         /// </summary>
-        public Task<PrintFormResult> DirectFormPrintAsync(DirectFormPrintRequest request, CancellationToken cancellation) => throw new NotImplementedException();
+        public Task<PrintFormResult> DirectFormPrintAsync(DirectFormPrintRequest request, CancellationToken cancellation) //=> throw new NotSupportedException();
+        {
+            Logger.Log("SYSTEM", $"Preint form {request.FormName}");
+            //Thread.Sleep(10000);
+            Logger.Log("SYSTEM", $"After sleep {request.FormName}");
+
+
+            String msg = null;
+            Thread thread = Thread.CurrentThread;
+            
+                msg = String.Format("{0} thread information\n", "DirectFormPrintAsync") +
+                      String.Format("   Background: {0}\n", thread.IsBackground) +
+                      String.Format("   Thread Pool: {0}\n", thread.IsThreadPoolThread) +
+                      String.Format("   Thread ID: {0}\n", thread.ManagedThreadId);
+           
+            Console.WriteLine(msg);
+            PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
+            Dictionary<string, Form> forms = printerServiceProvider.GetForms();
+            if(forms.ContainsKey(request.FormName))
+            {
+                Form form = forms[request.FormName];
+                Logger.Log("SYSTEM", $"Print From  form {form.Copyright}");
+                Logger.Log("SYSTEM", $"Print From  form {request.Fields.Keys}");
+                foreach (string s in request.Fields.Keys)
+                {
+                    Console.WriteLine("Field <{0}>=<{1}>", s, request.Fields[s]);
+
+                }
+            }
+
+            return Task.FromResult(new PrintFormResult(MessagePayload.CompletionCodeEnum.UnsupportedCommand));
+        }
 
         /// <summary>
         /// This method can turn the pages of a passbook inserted in the printer by a specified number of pages in a
@@ -533,11 +598,13 @@ namespace KAL.XFS4IoTSP.Printer.Sample
 
         private ILogger Logger { get; }
 
+        private MasungPrinter HardwareDevice { get; }
+
         private PrinterStatusClass.SupplyStatusClass PaperSupplyStatus { get; set; } = new(PrinterStatusClass.PaperSupplyEnum.Full, PrinterStatusClass.PaperTypeEnum.Single);
         private PrinterStatusClass.BlackMarkModeEnum BlackMarkModeStatus { get; set; } = PrinterStatusClass.BlackMarkModeEnum.Off;
-        
+
         private readonly SemaphoreSlim paperTakenSignal = new(0, 1);
         // Default page size is 10cm = 8 * 10 * 10 dots.
-        private int PageSize { get; set; } = 800;
+        private int PageSize { get; set; } = 600;
     }
 }
