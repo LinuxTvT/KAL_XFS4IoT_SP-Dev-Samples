@@ -148,7 +148,7 @@ namespace KAL.XFS4IoTSP.Printer.Sample
                                                                   CancellationToken cancellation)
         {
             await Task.Delay(200, cancellation);
-            /* Example of usage for the Bitmap printing for Windows only for now
+            /* Example of usage for the Bitmap printing for Windows only for now */
             PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
             int bitCount = 24;
 
