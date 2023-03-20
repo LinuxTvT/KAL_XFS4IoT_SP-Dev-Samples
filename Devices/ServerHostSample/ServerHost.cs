@@ -27,6 +27,8 @@ namespace Server
                 var EndpointDetails = Publisher.EndpointDetails;
 
                 /// CardReader Service Provider
+                /// 
+                /*
                 var simCardReaderDevice = new KAL.XFS4IoTSP.CardReader.Sample.CardReaderSample(Logger);
                 var cardReaderService = new CardReaderServiceProvider(EndpointDetails,
                                                                       ServiceName: "SimCardReader",
@@ -77,6 +79,7 @@ namespace Server
 
                 simPinPadDevice.SetServiceProvider = pinPadService;
                 Publisher.Add(pinPadService);
+                */
 
                 /// Printer Service Provider
                 var simPrinterDevice = new KAL.XFS4IoTSP.Printer.Sample.PrinterSample(Logger);
@@ -88,7 +91,17 @@ namespace Server
 
                 simPrinterDevice.SetServiceProvider = printerService;
                 Publisher.Add(printerService);
-                
+
+                DirectoryInfo d = new DirectoryInfo(@"C:\xfs\Form\MRW_RPTR"); //Assuming Test is your Folder
+
+                FileInfo[] Files = d.GetFiles("*.wfm"); //Getting Text files
+
+                foreach (FileInfo file in Files)
+                {
+                    simPrinterDevice.LoadDefinationFromFile(file);
+                }
+
+                /*
                 /// Lights Service Provider
                 var simLightsDevice = new KAL.XFS4IoTSP.Lights.Sample.LightsSample(Logger);
                 var lightsService = new LightsServiceProvider(EndpointDetails,
@@ -160,6 +173,7 @@ namespace Server
 
                 simCashAcceptorDevice.SetServiceProvider = cashAcceptorService;
                 Publisher.Add(cashAcceptorService);
+                */
 
                 /// CasRecycler Service Provider
                 /*
