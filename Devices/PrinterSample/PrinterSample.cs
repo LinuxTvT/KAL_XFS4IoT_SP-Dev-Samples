@@ -176,24 +176,32 @@ namespace KAL.XFS4IoTSP.Printer.Sample
                                                                   CancellationToken cancellation)
         {
             await Task.Delay(200, cancellation);
-            /* Example of usage for the Bitmap printing for Windows only for now */
-            PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
-            int bitCount = 1;
+            foreach (var task in request.PrintJob.Tasks)
+            {
+                if (task.Type == FieldTypeEnum.TEXT)
+                {
+                    TextTask textTask = task as TextTask;
+                    Logger.Log("DEVCLASS", $"X in dot:{textTask.x},Y in dot:{textTask.y}, Text to print:{textTask.Text}");
+                    // Send print data to the physical device with position
 
+                    PrinterStatus.Media = PrinterStatusClass.MediaEnum.Present;
+                }
+            }
+
+            /* Example of usage for the Bitmap printing for Windows only for now
+            PrinterServiceProvider printerServiceProvider = SetServiceProvider as PrinterServiceProvider;
+            int bitCount = 24;
             bool success = printerServiceProvider.PrintToBitmap(request.PrintJob, bitCount, true, out ImageInfo imageInfo);
             if (!success)
             {
                 return new PrintTaskResult(MessagePayload.CompletionCodeEnum.HardwareError, $"Failed on printing form to an image.", PrintFormCompletion.PayloadData.ErrorCodeEnum.FormInvalid);
             }
-
             PixelFormat pixelFormat = bitCount switch
             {
                 24 => PixelFormat.Format24bppRgb,
                 _ => PixelFormat.Format1bppIndexed,
             };
-
             Bitmap image = new(imageInfo.Data.Width, imageInfo.Data.Height, pixelFormat);
-
             if (imageInfo.Data.Palette.Count > 0)
             {
                 var palette = image.Palette;
@@ -208,18 +216,12 @@ namespace KAL.XFS4IoTSP.Printer.Sample
                 }
                 image.Palette = palette;
             }
-
             BitmapData data = image.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.WriteOnly, pixelFormat);
-
             byte[] formImage = imageInfo.Data.Data.ToArray();
-            System.Runtime.InteropServices.Marshal.Copy(formImage, 0, data.Scan0, formImage.Length);
-
+            Marshal.Copy(formImage, 0, data.Scan0, formImage.Length);
             image.UnlockBits(data);
-
             image.Save("C:\\temp\\test.bmp", ImageFormat.Bmp);
-
-            HardwareDevice.printBimap("C:\\temp\\test.bmp");
-            /**/
+            */
 
             return new PrintTaskResult(MessagePayload.CompletionCodeEnum.Success);
         }
@@ -232,6 +234,8 @@ namespace KAL.XFS4IoTSP.Printer.Sample
                                                         CancellationToken cancellation)
         {
             await Task.Delay(200, cancellation);
+            PrinterStatus.Media = PrinterStatusClass.MediaEnum.Present;
+
             return new RawPrintResult(MessagePayload.CompletionCodeEnum.Success);
         }
 
@@ -465,7 +469,8 @@ namespace KAL.XFS4IoTSP.Printer.Sample
             ValidStyle: FieldStyleEnum.BOLD |
                         FieldStyleEnum.CONDENSED |
                         FieldStyleEnum.ITALIC |
-                        FieldStyleEnum.NORMAL,
+                        FieldStyleEnum.NORMAL |
+                        FieldStyleEnum.DOUBLE,
             ValidBarcode: 0,
             ValidColor: FieldColorEnum.BLACK,
             ValidFonts: "ALL",
